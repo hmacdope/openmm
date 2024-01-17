@@ -1,5 +1,5 @@
 #include <OpenMM.h>
-
+#include <iomanip>   
 #include <set>
 #include <string>
 #include <fstream>
@@ -18,11 +18,20 @@ void testState(const State& state);
 int main() {
     ifstream sys_inp("system.xml");
     System* system = XmlSerializer::deserialize<System>(sys_inp);
-    ifstream integrator_inp("system.xml");
+    ifstream integrator_inp("integrator.xml");
     Integrator* integrator_1 = XmlSerializer::deserialize<Integrator>(integrator_inp);
     Integrator* integrator_2 = XmlSerializer::deserialize<Integrator>(integrator_inp);
     ifstream state_inp("state.xml");
     State* state = XmlSerializer::deserialize<State>(state_inp);
+
+    // Load any shared libraries containing GPU implementations.
+    Platform::loadPluginsFromDirectory("./");
+
+    // // Let OpenMM Context choose best platform.
+    // OpenMM::Context context(*system, *integrator_1);
+    // printf( "REMARK  Using OpenMM platform %s\n", 
+    //     context.getPlatform().getName().c_str() );
+
 
     // read state
     state->getPositions();
@@ -30,14 +39,27 @@ int main() {
     state->getVelocities();
     auto k_e = state->getKineticEnergy();
     auto pot_e = state->getPotentialEnergy();
+    cout.precision(20);
 
-    std::cout << "Potential energy: " << pot_e << "\n";
-    std::cout << "Kinetic Energy: " << k_e << "\n";
+    cout << "Potential energy: " << pot_e << "\n";
+    cout << "Kinetic Energy: " << k_e << "\n";
 
     refContext_ = new Context(*system, *integrator_1, Platform::getPlatformByName("CPU"));
+    cout << "made refcontext \n";
     coreContext_ = new Context(*system, *integrator_2, Platform::getPlatformByName("CUDA"));
+    cout << "made corecontext \n";
+    cout << "starting test state" << "\n";
+
+    coreContext_->setState(*state);
+    refContext_->setState(*state);
 
     testState(*state);
+
+
+  const State coreState =
+    coreContext_->getState(State::Positions | State::Velocities |
+                           State::Parameters | State::Energy | State::Forces);
+  testState(coreState);
 
     // Clean up memory
     delete state;
